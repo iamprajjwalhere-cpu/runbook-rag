@@ -1,0 +1,26 @@
+[
+  {
+    "question": "What four signals should a user-facing service monitor?",
+    "relevant_unit_ids": ["mon-001"]
+  },
+  {
+    "question": "How can we spot saturation before a resource reaches maximum capacity?",
+    "relevant_unit_ids": ["mon-003"]
+  },
+  {
+    "question": "Why can retries make an overloaded service worse?",
+    "relevant_unit_ids": ["ovl-002"]
+  },
+  {
+    "question": "What retry limits does the Google SRE example policy give?",
+    "relevant_unit_ids": ["ovl-003"]
+  },
+  {
+    "question": "When multiple service layers are involved, where should retries happen?",
+    "relevant_unit_ids": ["ovl-004"]
+  },
+  {
+    "question": "How should latency be measured for successful and failed requests?",
+    "relevant_unit_ids": ["mon-002"]
+  }
+]
