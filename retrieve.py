@@ -51,13 +51,20 @@ Evidence:
     return answer, hits
 
 
-def search_collection(collection_name: str, question: str, top_k: int = 3):
-    """Embed a question and find the closest stored documents."""
+def search_collection(
+    collection_name: str,
+    question: str,
+    top_k: int = 3,
+    query_embedding: list[float] | None = None,
+):
+    """Find the closest stored documents to a question."""
     collection = chroma_client.get_collection(name=collection_name)
-    question_embedding = embed_texts([question])[0]
+
+    if query_embedding is None:
+        query_embedding = embed_texts([question])[0]
 
     results = collection.query(
-        query_embeddings=[question_embedding],
+        query_embeddings=[query_embedding],
         n_results=top_k,
         include=["documents", "metadatas", "distances"],
     )
