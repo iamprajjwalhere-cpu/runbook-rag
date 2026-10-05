@@ -10,11 +10,119 @@ DB_PATH = BASE_DIR / "chroma_db"
 
 CHUNK_COLLECTION = "runbook_chunks"
 UNIT_COLLECTION = "knowledge_units"
+MAX_DISTANCE = 0.35
 
 chroma_client = chromadb.PersistentClient(path=str(DB_PATH))
 
+
+def infer_topic(question: str) -> str | None:
+    """Choose a topic using simple, deterministic keyword rules."""
+    normalized = question.casefold()
+
+    monitoring_terms = (
+        "monitor",
+        "latency",
+        "traffic",
+        "error",
+        "saturat",
+        "resource",
+        "signal",
+    )
+    overload_terms = (
+        "overload",
+        "retry",
+        "degrad",
+    )
+
+    # When both kinds of terms appear, treat monitoring as the focus.
+    if any(term in normalized for term in monitoring_terms):
+        return "monitoring"
+
+    if any(term in normalized for term in overload_terms):
+        return "overload"
+
+    return None
+
+
+def metadata_filter_for(
+    question: str,
+    collection_name: str,
+) -> dict | None:
+    """Map the inferred topic to the collection's metadata fields."""
+    topic = infer_topic(question)
+
+    if topic is None:
+        return None
+
+    if collection_name == UNIT_COLLECTION:
+        return {"topic": topic}
+
+    if collection_name == CHUNK_COLLECTION:
+        return {"source": f"{topic}.md"}
+
+    return None
+
+
+def search_collection(
+    collection_name: str,
+    question: str,
+    top_k: int = 3,
+    query_embedding: list[float] | None = None,
+    where: dict | None = None,
+):
+    """Find the closest stored documents to a question."""
+    collection = chroma_client.get_collection(name=collection_name)
+
+    if query_embedding is None:
+        query_embedding = embed_texts([question])[0]
+
+    if where is None:
+        where = metadata_filter_for(question, collection_name)
+
+    query_options = {
+        "query_embeddings": [query_embedding],
+        "n_results": top_k,
+        "include": ["documents", "metadatas", "distances"],
+    }
+
+    if where is not None:
+        query_options["where"] = where
+
+    results = collection.query(**query_options)
+
+    hits = []
+    for index, document in enumerate(results["documents"][0]):
+        hits.append(
+            {
+                "id": results["ids"][0][index],
+                "text": document,
+                "metadata": results["metadatas"][0][index],
+                "distance": results["distances"][0][index],
+            }
+        )
+
+    return hits
+
+
 def answer_with_knowledge_units(question: str):
-    hits = search_collection(UNIT_COLLECTION, question, top_k=3)
+    """Answer from sufficiently close, retrieved knowledge units."""
+    retrieved_hits = search_collection(
+        UNIT_COLLECTION,
+        question,
+        top_k=3,
+    )
+
+    hits = [
+        hit
+        for hit in retrieved_hits
+        if hit["distance"] <= MAX_DISTANCE
+    ]
+
+    if not hits:
+        return (
+            "I couldn't find enough relevant evidence in the runbooks to answer that.",
+            [],
+        )
 
     evidence_items = []
     for hit in hits:
@@ -51,48 +159,19 @@ Evidence:
     return answer, hits
 
 
-def search_collection(
-    collection_name: str,
-    question: str,
-    top_k: int = 3,
-    query_embedding: list[float] | None = None,
-):
-    """Find the closest stored documents to a question."""
-    collection = chroma_client.get_collection(name=collection_name)
-
-    if query_embedding is None:
-        query_embedding = embed_texts([question])[0]
-
-    results = collection.query(
-        query_embeddings=[query_embedding],
-        n_results=top_k,
-        include=["documents", "metadatas", "distances"],
-    )
-
-    hits = []
-    for index, document in enumerate(results["documents"][0]):
-        hits.append(
-            {
-                "id": results["ids"][0][index],
-                "text": document,
-                "metadata": results["metadatas"][0][index],
-                "distance": results["distances"][0][index],
-            }
-        )
-
-    return hits
-
-
 if __name__ == "__main__":
     question = input("Ask a runbook question: ")
 
     answer, hits = answer_with_knowledge_units(question)
 
     print("\n--- Evidence sent to Gemini ---")
-    for hit in hits:
-        print(f"[{hit['id']}] Distance: {hit['distance']:.4f}")
-        print(hit["text"])
-        print()
+    if hits:
+        for hit in hits:
+            print(f"[{hit['id']}] Distance: {hit['distance']:.4f}")
+            print(hit["text"])
+            print()
+    else:
+        print("No sufficiently close runbook evidence found.")
 
     print("--- Answer ---")
     print(answer)
