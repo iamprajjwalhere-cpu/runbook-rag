@@ -22,5 +22,29 @@
   {
     "question": "How should latency be measured for successful and failed requests?",
     "relevant_unit_ids": ["mon-002"]
+  },
+    {
+    "question": "Which service health indicators show demand, failures, user wait time, and resource pressure?",
+    "relevant_unit_ids": ["mon-001"]
+  },
+  {
+    "question": "Can a system be saturated before its limiting resource reaches full capacity?",
+    "relevant_unit_ids": ["mon-003"]
+  },
+  {
+    "question": "How can retries add load while a service is already overloaded?",
+    "relevant_unit_ids": ["ovl-002"]
+  },
+  {
+    "question": "What attempt count and client retry ratio did the SRE example policy use?",
+    "relevant_unit_ids": ["ovl-003"]
+  },
+  {
+    "question": "If service A calls B and B calls C, should every layer retry?",
+    "relevant_unit_ids": ["ovl-004"]
+  },
+  {
+    "question": "Should latency tracking include both successful and failed requests?",
+    "relevant_unit_ids": ["mon-002"]
   }
 ]
