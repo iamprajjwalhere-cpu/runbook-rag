@@ -2,6 +2,8 @@
 
 An evidence-grounded assistant for operational runbooks. It indexes runbooks as both conventional text chunks and typed knowledge units, retrieves relevant evidence, and asks Gemini to answer with citations. If retrieved evidence is too distant, it abstains.
 
+The source library currently covers monitoring, overload handling, incident response, SLOs and error budgets, and canary releases.
+
 ## What it demonstrates
 
 - Runbook ingestion and vector indexing with ChromaDB
@@ -80,23 +82,29 @@ Try: `What should we monitor when a service is overloaded?`
 
 The evaluation embeds each labeled question once and compares the top three results from both collections.
 
+### 6. Launch the web app
+
+```powershell
+.\.venv\Scripts\python.exe -m streamlit run app.py
+```
+
 ## Current evaluation
 
-On a hand-labeled set of 12 questions, including paraphrases:
+On a hand-labeled set of 24 questions across the five runbooks, including paraphrases:
 
 | Retrieval method | Hit@3 | MRR |
 |---|---:|---:|
-| Baseline chunks | 12/12 (100%) | 0.917 |
-| Typed knowledge units | 12/12 (100%) | 0.917 |
+| Baseline chunks | 24/24 (100%) | 0.958 |
+| Typed knowledge units | 24/24 (100%) | 0.958 |
 
-The methods tie on this small dataset. The knowledge units add explicit topic, type, source, and stable ID metadata, but this evaluation does not yet show a ranking improvement.
+The methods tie on this small dataset. The knowledge units add explicit topic, type, source, and stable ID metadata, but this evaluation does not yet show a ranking improvement. Hit@3 and MRR measure retrieval ranking, not answer correctness.
 
 A manual out-of-scope check (“president of India?”) was rejected by the distance gate.
 
 ## Limitations
 
-- The corpus contains two short runbooks and seven knowledge units.
-- The evaluation set is small and hand-labeled; results do not establish general retrieval accuracy.
+- The corpus contains five concise runbooks and 28 curated knowledge units.
+- The evaluation set has 24 hand-labeled questions; results do not establish general retrieval accuracy.
 - Topic routing uses keyword rules and falls back to unfiltered retrieval when no topic is detected.
 - The `0.35` distance cutoff is a provisional setting for this corpus, not a universal confidence score.
 - Generated answers are not yet covered by an automated answer-quality evaluation.
@@ -108,6 +116,7 @@ data/
   runbooks/             Source Markdown runbooks
   knowledge_units.jsonl Curated, typed evidence records
   eval_questions.json   Labeled retrieval questions
+app.py                  Streamlit interface
 gemini_client.py        Gemini API client and model calls
 ingest.py               Runbook loading and chunking
 knowledge_units.py      Knowledge-unit parsing and validation
@@ -120,3 +129,7 @@ evaluate_retrieval.py   Baseline-versus-KU retrieval comparison
 
 - [Google SRE Book: Monitoring Distributed Systems](https://sre.google/sre-book/monitoring-distributed-systems/)
 - [Google SRE Book: Handling Overload](https://sre.google/sre-book/handling-overload/)
+- [Google SRE Book: Managing Incidents](https://sre.google/sre-book/managing-incidents/)
+- [Google SRE Workbook: Implementing SLOs](https://sre.google/workbook/implementing-slos/)
+- [Google SRE Workbook: Example Error Budget Policy](https://sre.google/workbook/error-budget-policy/)
+- [Google SRE Workbook: Canarying Releases](https://sre.google/workbook/canarying-releases/)

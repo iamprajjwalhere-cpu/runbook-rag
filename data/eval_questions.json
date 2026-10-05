@@ -46,5 +46,17 @@
   {
     "question": "Should latency tracking include both successful and failed requests?",
     "relevant_unit_ids": ["mon-002"]
-  }
+  },
+  {"question":"Who sends updates during an incident?","relevant_unit_ids":["ir-004"]},
+  {"question":"Who coordinates technical mitigation and recovery?","relevant_unit_ids":["ir-003"]},
+  {"question":"What should the shared incident record track?","relevant_unit_ids":["ir-006"]},
+  {"question":"How should operational handoffs be handled?","relevant_unit_ids":["ir-007"]},
+  {"question":"What is a service level objective?","relevant_unit_ids":["slo-001"]},
+  {"question":"How is a service level indicator commonly calculated?","relevant_unit_ids":["slo-002"]},
+  {"question":"What error budget remains for a 99.9% SLO?","relevant_unit_ids":["slo-004"]},
+  {"question":"What does the example policy do when a four-week error budget is exceeded?","relevant_unit_ids":["slo-005"]},
+  {"question":"What is a canary release?","relevant_unit_ids":["can-001"]},
+  {"question":"Why compare canary and control metrics separately?","relevant_unit_ids":["can-003"]},
+  {"question":"Which signals should a canary evaluation start with?","relevant_unit_ids":["can-004"]},
+  {"question":"What should happen if a canary performs worse than the control?","relevant_unit_ids":["can-005"]}
 ]
