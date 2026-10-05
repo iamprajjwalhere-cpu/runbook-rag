@@ -13,8 +13,6 @@ load_dotenv(
 )
 api_key = os.getenv("GEMINI_API_KEY")
 
-print("DEBUG: key loaded =", bool(api_key), "| length =", len(api_key or ""))
-
 if not api_key:
     raise RuntimeError(
         "GEMINI_API_KEY is missing. Add your key to the local .env file."
