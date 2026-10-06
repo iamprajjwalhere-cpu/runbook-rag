@@ -1,6 +1,13 @@
 import streamlit as st
 
-from retrieve import MAX_DISTANCE, answer_with_knowledge_units
+from index_data import main as build_index
+from retrieve import (
+    CHUNK_COLLECTION,
+    UNIT_COLLECTION,
+    MAX_DISTANCE,
+    answer_with_knowledge_units,
+    chroma_client,
+)
 
 
 st.set_page_config(
@@ -8,6 +15,22 @@ st.set_page_config(
     page_icon="⌁",
     layout="wide",
 )
+
+@st.cache_resource
+def ensure_runbook_index():
+    """Build the Chroma index on a fresh deployment, once per app process."""
+    required = {CHUNK_COLLECTION, UNIT_COLLECTION}
+    existing = {
+        collection.name
+        for collection in chroma_client.list_collections()
+    }
+
+    if not required.issubset(existing):
+        build_index()
+
+
+with st.spinner("Checking the runbook index..."):
+    ensure_runbook_index()
 
 st.markdown(
     """
@@ -284,6 +307,11 @@ div[data-testid="stTextArea"] textarea:focus {
     .hero {
         padding-top: 1rem;
     }
+    
+    div[data-testid="stTextArea"] textarea::placeholder {
+    color: #65746d !important;
+    opacity: 1 !important;
+}
 }
     </style>
     """,

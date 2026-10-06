@@ -14,12 +14,18 @@ load_dotenv(
 api_key = os.getenv("GEMINI_API_KEY")
 
 if not api_key:
+    try:
+        import streamlit as st
+        api_key = st.secrets["GEMINI_API_KEY"]
+    except Exception:
+        api_key = None
+
+if not api_key:
     raise RuntimeError(
-        "GEMINI_API_KEY is missing. Add your key to the local .env file."
+        "GEMINI_API_KEY is missing. Set it in .env or Streamlit secrets."
     )
 
 client = genai.Client(api_key=api_key)
-
 def embed_texts(texts: list[str]) -> list[list[float]]:
     """Turn each text into a vector that can be searched by similarity."""
     if not texts:
