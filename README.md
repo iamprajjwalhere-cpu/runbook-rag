@@ -50,11 +50,12 @@ Copy-Item .env.example .env
 
 Open `.env`, replace the placeholder with your Gemini API key, and save. Never commit `.env`; it is excluded by `.gitignore`.
 
-### 3. Start the app
+### Start the application
+
+Run the API in one terminal:
 
 ```powershell
-.\.venv\Scripts\python.exe -m streamlit run app.py
-```
+.\.venv\Scripts\python.exe -m uvicorn api:app --reload --host 127.0.0.1 --port 8000
 
 Open the local URL Streamlit prints. Upload a `.md`, `.txt`, text-based `.pdf`, or `.pptx` file under **Documents**, then use **Ask your knowledge base** to search it. The app accepts files up to 5 MB. Scanned PDFs are detected when they have no selectable text; OCR is not included yet.
 
