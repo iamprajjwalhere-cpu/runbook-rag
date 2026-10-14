@@ -2,3 +2,8 @@ google-genai
 python-dotenv
 chromadb
 streamlit
+pypdf
+python-pptx
+fastapi
+uvicorn[standard]
+python-multipart
