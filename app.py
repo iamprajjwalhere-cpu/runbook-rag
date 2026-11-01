@@ -1,41 +1,26 @@
-"""Upload-first interface for the Runbook-RAG portfolio prototype."""
+"""Upload-first student study workspace (Streamlit fallback interface)."""
 
-import json
 from html import escape
-from pathlib import Path
-
 import streamlit as st
 
-from workspace_rag import (
+from api_client import (
     MAX_DISTANCE,
     MAX_UPLOAD_BYTES,
     SUPPORTED_EXTENSIONS,
-    answer_workspace_question,
+    add_sample_document,
+    answer_question,
     delete_document,
-    ingest_upload,
-    list_documents,
-    workspace_unit_count,
+    get_sample_documents,
+    get_workspace_summary,
+    upload_document,
 )
 
-
-BASE_DIR = Path(__file__).resolve().parent
-EVAL_FILE = BASE_DIR / "data" / "eval_questions.json"
-TENANT_ID = "local_demo_workspace"
-
 st.set_page_config(
-    page_title="Runbook RAG | Knowledge workspace",
-    page_icon="R",
+    page_title="Studyspace | Student notebook",
+    page_icon="S",
     layout="wide",
     initial_sidebar_state="expanded",
 )
-
-
-@st.cache_data
-def load_benchmark() -> list[dict]:
-    try:
-        return json.loads(EVAL_FILE.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return []
 
 
 st.markdown(
@@ -110,29 +95,36 @@ st.markdown(
 
 with st.sidebar:
     st.markdown(
-        '<div class="brand"><div class="brand-mark">R</div><div><div class="brand-name">Runbook RAG</div><div class="brand-caption">Company knowledge workspace</div></div></div>',
+        '<div class="brand"><div class="brand-mark">S</div><div><div class="brand-name">Studyspace</div><div class="brand-caption">Student study notebook</div></div></div>',
         unsafe_allow_html=True,
     )
     st.markdown('<div class="side-label">WORKSPACE</div>', unsafe_allow_html=True)
     page = st.radio(
         "Navigation",
-        ["Overview", "Documents", "Ask your knowledge base", "Evaluation"],
+        ["Overview", "Documents", "Study chat"],
         key="main_navigation",
         label_visibility="collapsed",
     )
     st.divider()
     st.markdown('<div class="side-label">THIS PROTOTYPE</div>', unsafe_allow_html=True)
-    st.caption("Single local workspace")
+    st.caption("One local study notebook")
     st.caption("MD · TXT · PDF · PPTX ingestion")
     st.caption("Gemini embeddings · ChromaDB")
     st.markdown("---")
-    st.caption("Use sample, non-sensitive documents only. Sign-in and tenant isolation are not implemented.")
+    st.caption("Local prototype only. Sign-in and separate student accounts are not implemented.")
 
 
-documents = list_documents(tenant_id=TENANT_ID)
-unit_count = workspace_unit_count(tenant_id=TENANT_ID)
+try:
+    workspace = get_workspace_summary()
+except RuntimeError as error:
+    st.error(str(error))
+    st.info("The API and Streamlit run in separate terminals. Start the API, wait for its startup message, then refresh this page.")
+    st.stop()
+documents = workspace["documents"]
+unit_count = workspace["passage_count"]
+
 st.markdown(
-    '<div class="workspace-bar"><div class="workspace-path">Workspace&nbsp; / &nbsp;<strong>Company knowledge base</strong></div><div class="prototype-pill">LOCAL PROTOTYPE</div></div>',
+    '<div class="workspace-bar"><div class="workspace-path">Studyspace&nbsp; / &nbsp;<strong>My study notebook</strong></div><div class="prototype-pill">LOCAL PROTOTYPE</div></div>',
     unsafe_allow_html=True,
 )
 
@@ -149,18 +141,18 @@ def render_stats() -> None:
 
 
 def render_upload() -> None:
-    st.markdown('<div class="section-heading">Add company documents</div>', unsafe_allow_html=True)
-    st.markdown('<p class="section-caption">Upload internal guides, policies, and operating procedures. PDF page and presentation slide references are retained with indexed passages.</p>', unsafe_allow_html=True)
+    st.markdown('<div class="section-heading">Add course material</div>', unsafe_allow_html=True)
+    st.markdown('<p class="section-caption">Upload lecture notes, readings, and slides. Page and slide references are retained with searchable passages.</p>', unsafe_allow_html=True)
     uploads = st.file_uploader(
-        "Choose documents to index",
+        "Choose study materials to add",
         type=[extension.lstrip(".") for extension in sorted(SUPPORTED_EXTENSIONS)],
         accept_multiple_files=True,
         help=f"Up to {MAX_UPLOAD_BYTES // (1024 * 1024)} MB per file. Scanned PDF pages need OCR, which is not included yet.",
     )
-    if st.button("Add to knowledge base", type="primary", disabled=not uploads):
+    if st.button("Add to notebook", type="primary", disabled=not uploads):
         for upload in uploads or []:
             try:
-                result = ingest_upload(upload.name, upload.getvalue(), tenant_id=TENANT_ID)
+                result = upload_document(upload.name, upload.getvalue())
                 st.success(f"Indexed {result['filename']} · {result['chunks']} passages")
                 for warning in result["warnings"]:
                     st.warning(f"{upload.name}: {warning}")
@@ -169,17 +161,42 @@ def render_upload() -> None:
         st.rerun()
 
 
+def render_sample_documents() -> None:
+    st.markdown('<div class="section-heading">Try a sample study note</div>', unsafe_allow_html=True)
+    st.markdown('<p class="section-caption">Add a short Computer Networks lesson to explore source-grounded study chat.</p>', unsafe_allow_html=True)
+    try:
+        samples = get_sample_documents()
+    except RuntimeError as error:
+        st.error(f"Could not load the sample study note: {error}")
+        return
+    existing = {document["filename"] for document in documents}
+    if not samples:
+        st.info("No sample study notes are available in data/study_samples.")
+        return
+    for sample in samples:
+        filename = sample["filename"]
+        label = "Already added" if filename in existing else f"Add {sample['title']}"
+        if st.button(label, key=f"sample_{filename}", disabled=filename in existing):
+            try:
+                result = add_sample_document(filename)
+                st.success(f"Added {result['filename']} · {result['chunks']} passages")
+                st.rerun()
+            except Exception as error:
+                st.error(f"Could not add {filename}: {error}")
+
+
 if page == "Overview":
-    st.markdown('<div class="eyebrow">COMPANY KNOWLEDGE · WORKSPACE</div>', unsafe_allow_html=True)
-    st.markdown('<h1 class="page-title">Your knowledge base</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="page-subtitle">Bring your team’s internal documents together and ask questions with source-backed answers.</p>', unsafe_allow_html=True)
+    st.markdown('<div class="eyebrow">STUDENT STUDY · NOTEBOOK</div>', unsafe_allow_html=True)
+    st.markdown('<h1 class="page-title">Learn from your own material</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="page-subtitle">Bring class notes, readings, and slides together. Ask questions and follow answers back to their sources.</p>', unsafe_allow_html=True)
     render_stats()
     if not documents:
         st.markdown(
-            '<div class="empty-state"><div class="empty-icon">+</div><h2 class="empty-title">Start with your own knowledge</h2><p class="empty-copy">This workspace starts empty. Add a policy, handbook, troubleshooting guide, or operating procedure to create its searchable knowledge base.</p></div>',
+            '<div class="empty-state"><div class="empty-icon">+</div><h2 class="empty-title">Start with your course material</h2><p class="empty-copy">Add lecture notes, a reading, or a slide deck to create your searchable study notebook.</p></div>',
             unsafe_allow_html=True,
         )
         render_upload()
+        render_sample_documents()
     else:
         st.markdown('<div class="section-heading">Recently added</div>', unsafe_allow_html=True)
         for document in documents[:5]:
@@ -188,14 +205,15 @@ if page == "Overview":
                 unsafe_allow_html=True,
             )
         st.markdown('<div class="section-heading">Next step</div>', unsafe_allow_html=True)
-        st.markdown('<div class="surface"><div class="surface-title">Ask across your documents</div><p class="surface-copy">Open “Ask your knowledge base” to retrieve relevant passages and get an answer with evidence IDs.</p></div>', unsafe_allow_html=True)
+        st.markdown('<div class="surface"><div class="surface-title">Study with your sources</div><p class="surface-copy">Open Study chat to ask questions and inspect the passages supporting each answer.</p></div>', unsafe_allow_html=True)
 
 elif page == "Documents":
-    st.markdown('<div class="eyebrow">DOCUMENT MANAGEMENT</div>', unsafe_allow_html=True)
-    st.markdown('<h1 class="page-title">Documents</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="page-subtitle">Manage the source material that powers answers in this workspace.</p>', unsafe_allow_html=True)
+    st.markdown('<div class="eyebrow">YOUR STUDY NOTEBOOK</div>', unsafe_allow_html=True)
+    st.markdown('<h1 class="page-title">Your study sources</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="page-subtitle">Manage the class materials that ground answers in your notebook.</p>', unsafe_allow_html=True)
     render_stats()
     render_upload()
+    render_sample_documents()
     st.markdown('<div class="section-heading">Indexed documents</div>', unsafe_allow_html=True)
     if not documents:
         st.info("No documents yet. Add a supported file above to begin.")
@@ -209,17 +227,17 @@ elif page == "Documents":
             )
         with right:
             if st.button("Remove", key=f"remove_{index}"):
-                delete_document(document["document_hash"], tenant_id=TENANT_ID)
+                delete_document(document["document_hash"])
                 st.rerun()
 
-elif page == "Ask your knowledge base":
-    st.markdown('<div class="eyebrow">GROUNDED QUESTION ANSWERING</div>', unsafe_allow_html=True)
-    st.markdown('<h1 class="page-title">Ask your knowledge base</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="page-subtitle">Ask about the documents your team has added. Answers are limited to retrieved passages and include evidence you can inspect.</p>', unsafe_allow_html=True)
+elif page == "Study chat":
+    st.markdown('<div class="eyebrow">SOURCE-GROUNDED STUDY CHAT</div>', unsafe_allow_html=True)
+    st.markdown('<h1 class="page-title">Explore what you’re learning</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="page-subtitle">Ask about your course materials. Answers use retrieved passages and include citations you can inspect.</p>', unsafe_allow_html=True)
     render_stats()
     if not documents:
         st.markdown(
-            '<div class="empty-state"><div class="empty-icon">0</div><h2 class="empty-title">Your knowledge base is empty</h2><p class="empty-copy">Add a Markdown, text, PDF, or PowerPoint document first. The assistant will search only material indexed in this workspace.</p></div>',
+            '<div class="empty-state"><div class="empty-icon">0</div><h2 class="empty-title">Your notebook is empty</h2><p class="empty-copy">Add a Markdown, text, PDF, or PowerPoint file first. Study chat searches only sources indexed in this notebook.</p></div>',
             unsafe_allow_html=True,
         )
         st.button("Go to documents", on_click=lambda: st.session_state.update({"main_navigation": "Documents"}))
@@ -227,11 +245,11 @@ elif page == "Ask your knowledge base":
         with st.form("ask_form", border=True):
             question = st.text_area(
                 "Question",
-                placeholder="Ask a question about the documents in this workspace…",
+                placeholder="Ask a question about your notes, readings, or slides…",
                 height=115,
                 label_visibility="collapsed",
             )
-            st.caption(f"Searches {len(documents)} documents · relevance threshold {MAX_DISTANCE:.2f}")
+                st.caption(f"Searches {len(documents)} sources · relevance threshold {MAX_DISTANCE:.2f}")
             submitted = st.form_submit_button("Search and answer  →", type="primary")
         if submitted:
             if not question.strip():
@@ -239,12 +257,36 @@ elif page == "Ask your knowledge base":
             else:
                 with st.spinner("Finding relevant passages…"):
                     try:
-                        answer, hits = answer_workspace_question(question.strip(), tenant_id=TENANT_ID)
+                        answer, hits = answer_question(question.strip())
                     except Exception as error:
                         st.error(f"The search could not be completed: {error}")
                         st.stop()
                 accepted_hits = [hit for hit in hits if hit.get("accepted", True)]
                 rejected_hits = [hit for hit in hits if not hit.get("accepted", True)]
+                st.session_state["current_answer"] = {
+                    "question": question.strip(),
+                    "answer": answer,
+                    "hits": hits,
+                }
+                st.session_state.setdefault("qa_history", []).append(
+                    {"question": question.strip(), "answer": answer, "hits": hits}
+                )
+        if st.session_state.get("qa_history"):
+            st.markdown('<div class="section-heading">Recent questions</div>', unsafe_allow_html=True)
+            for item in reversed(st.session_state["qa_history"][-10:]):
+                with st.expander(item["question"]):
+                    st.markdown(item["answer"])
+                    for source_hit in item["hits"]:
+                        source = source_hit["metadata"].get("source", "unknown source")
+                        section = source_hit["metadata"].get("section", "")
+                        st.caption(f"Evidence [{source_hit['id']}] · {source} · {section}")
+        current_answer = st.session_state.get("current_answer")
+        if current_answer:
+                answer = current_answer["answer"]
+                hits = current_answer["hits"]
+                accepted_hits = [hit for hit in hits if hit.get("accepted", True)]
+                rejected_hits = [hit for hit in hits if not hit.get("accepted", True)]
+                st.markdown(f"**Question:** {escape(current_answer['question'])}")
                 st.markdown('<div class="section-heading">Answer and evidence</div>', unsafe_allow_html=True)
                 answer_column, evidence_column = st.columns([1.05, .95], gap="large")
                 with answer_column:
@@ -289,24 +331,11 @@ elif page == "Ask your knowledge base":
                             f'<div class="evidence-card"><div class="evidence-head"><span><span class="evidence-id">{escape(hit["id"])}</span>{status}</span><span class="evidence-distance">distance {hit["distance"]:.3f}</span></div><div class="evidence-meta">{escape(metadata.get("source", ""))} &nbsp;·&nbsp; {escape(metadata.get("section", ""))} {location_label}</div><div class="evidence-text">{escape(hit["text"])}</div></div>',
                             unsafe_allow_html=True,
                         )
+                        citation_parts = [hit["id"], metadata.get("source", "unknown source"), metadata.get("section", "section unavailable")]
+                        if metadata.get("page_number") is not None:
+                            citation_parts.append(f"Page {metadata['page_number']}")
+                        if metadata.get("slide_number") is not None:
+                            citation_parts.append(f"Slide {metadata['slide_number']}")
+                        st.caption("Citation: [" + "] · ".join(citation_parts) + "]")
 
-elif page == "Evaluation":
-    benchmark = load_benchmark()
-    st.markdown('<div class="eyebrow">RETRIEVAL QUALITY</div>', unsafe_allow_html=True)
-    st.markdown('<h1 class="page-title">Evaluation</h1>', unsafe_allow_html=True)
-    st.markdown('<p class="page-subtitle">The included benchmark evaluates the sample SRE corpus. It does not measure documents uploaded to this workspace.</p>', unsafe_allow_html=True)
-    st.markdown(
-        f'''<div class="stat-grid">
-        <div class="stat-card"><div class="metric-label">LABELED QUESTIONS</div><div class="stat-value">{len(benchmark):02d}</div><div class="stat-detail">Sample SRE benchmark</div></div>
-        <div class="stat-card"><div class="metric-label">KNOWLEDGE UNIT HIT@3</div><div class="stat-value">100%</div><div class="stat-detail">24 of 24 questions</div></div>
-        <div class="stat-card"><div class="metric-label">MRR</div><div class="stat-value">0.958</div><div class="stat-detail">Tied with baseline chunks</div></div>
-        </div>''',
-        unsafe_allow_html=True,
-    )
-    st.markdown('<div class="note">Both retrieval methods tie on the current 24-question set. This is a small portfolio benchmark, not evidence that one method is generally better. Workspace uploads are not included in these reported results.</div>', unsafe_allow_html=True)
-    st.markdown('<div class="section-heading">Benchmark questions</div>', unsafe_allow_html=True)
-    for row in benchmark:
-        st.markdown(f"- {escape(row.get('question', ''))}")
-
-
-st.markdown('<div class="footer">RUNBOOK RAG&nbsp; · &nbsp;UPLOAD-FIRST KNOWLEDGE WORKSPACE&nbsp; · &nbsp;LOCAL SINGLE-WORKSPACE PROTOTYPE</div>', unsafe_allow_html=True)
+st.markdown('<div class="footer">STUDYSPACE&nbsp; · &nbsp;SOURCE-GROUNDED STUDY NOTEBOOK&nbsp; · &nbsp;LOCAL SINGLE-WORKSPACE PROTOTYPE</div>', unsafe_allow_html=True)

@@ -7,3 +7,4 @@ python-pptx
 fastapi
 uvicorn[standard]
 python-multipart
+requests
