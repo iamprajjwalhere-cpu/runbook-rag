@@ -52,3 +52,41 @@ def generate_text(prompt: str) -> str:
     )
 
     return (response.text or "").strip()
+
+
+def stream_text(prompt: str):
+    """Yield text chunks as Gemini generates them."""
+    for chunk in client.models.generate_content_stream(
+        model=GENERATION_MODEL,
+        contents=prompt,
+    ):
+        text = chunk.text or ""
+        if text:
+            yield text
+
+def embed_texts(texts: list[str]) -> list[list[float]]:
+    """Embed texts in batches of at most 100."""
+    if not texts:
+        return []
+
+    batch_size = 100
+    all_embeddings = []
+
+    for start in range(0, len(texts), batch_size):
+        batch = texts[start : start + batch_size]
+
+        contents = [
+            types.Content(parts=[types.Part.from_text(text=text)])
+            for text in batch
+        ]
+
+        response = client.models.embed_content(
+            model=EMBEDDING_MODEL,
+            contents=contents,
+        )
+
+        all_embeddings.extend(
+            embedding.values for embedding in response.embeddings
+        )
+
+    return all_embeddings

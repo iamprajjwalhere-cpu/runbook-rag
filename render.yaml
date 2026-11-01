@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: studyspace
+    runtime: docker
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: CHROMA_DB_PATH
+        value: /tmp/studyspace/chroma_db

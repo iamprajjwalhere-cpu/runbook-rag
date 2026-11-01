@@ -1,7 +1,11 @@
 from pathlib import Path
+import json
+from typing import Literal
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
+from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -9,9 +13,15 @@ from workspace_rag import (
     MAX_UPLOAD_BYTES,
     SUPPORTED_EXTENSIONS,
     answer_workspace_question,
+    build_study_atlas,
+    build_study_guide,
+    build_study_tool,
     delete_document,
+    get_document_preview,
     ingest_upload,
     list_documents,
+    search_workspace,
+    stream_workspace_answer,
     workspace_unit_count,
 )
 
@@ -41,6 +51,33 @@ app.add_middleware(
 class AskRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
     top_k: int = Field(default=5, ge=1, le=10)
+    selected_document_hashes: list[str] | None = Field(default=None, max_length=50)
+    mode: Literal["simple", "exam", "deep", "steps"] = "exam"
+    history: list[dict[str, str]] = Field(default_factory=list, max_length=8)
+
+
+class StudyAtlasRequest(BaseModel):
+    topic: str = Field(min_length=1, max_length=500)
+    selected_document_hashes: list[str] | None = Field(default=None, max_length=50)
+
+
+class StudyToolRequest(BaseModel):
+    topic: str = Field(min_length=1, max_length=500)
+    tool: Literal["flashcards", "quiz"]
+    count: int = Field(default=5, ge=3, le=10)
+    quiz_format: Literal["multiple_choice", "true_false", "short_answer"] = "multiple_choice"
+    difficulty: Literal["easy", "medium", "hard"] = "medium"
+    selected_document_hashes: list[str] | None = Field(default=None, max_length=50)
+
+
+class StudyGuideRequest(BaseModel):
+    topic: str = Field(min_length=1, max_length=500)
+    selected_document_hashes: list[str] | None = Field(default=None, max_length=50)
+
+
+class SearchRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=500)
+    selected_document_hashes: list[str] | None = Field(default=None, max_length=50)
 
 
 @app.get("/health")
@@ -56,6 +93,44 @@ def get_documents():
         "document_count": len(documents),
         "passage_count": workspace_unit_count(tenant_id=LOCAL_TENANT_ID),
     }
+
+
+@app.post("/api/v1/search")
+def global_search(request: SearchRequest):
+    query = request.query.strip()
+    if not query:
+        raise HTTPException(status_code=422, detail="Search text cannot be blank.")
+    hits = search_workspace(
+        query,
+        tenant_id=LOCAL_TENANT_ID,
+        top_k=8,
+        include_rejected=True,
+        selected_document_hashes=request.selected_document_hashes,
+    )
+    return {
+        "query": query,
+        "results": [
+            {
+                "id": hit["id"],
+                "text": hit["text"],
+                "distance": hit["distance"],
+                "accepted": hit["accepted"],
+                "source": hit["metadata"].get("source"),
+                "section": hit["metadata"].get("section"),
+                "page": hit["metadata"].get("page_number"),
+                "slide": hit["metadata"].get("slide_number"),
+            }
+            for hit in hits
+        ],
+    }
+
+
+@app.get("/api/v1/documents/{document_hash}/preview")
+def preview_document(document_hash: str):
+    preview = get_document_preview(document_hash, tenant_id=LOCAL_TENANT_ID)
+    if not preview["passages"]:
+        raise HTTPException(status_code=404, detail="Document not found.")
+    return preview
 
 
 @app.get("/api/v1/sample-documents")
@@ -125,6 +200,7 @@ def ask(request: AskRequest):
         question,
         tenant_id=LOCAL_TENANT_ID,
         top_k=request.top_k,
+        selected_document_hashes=request.selected_document_hashes,
     )
 
     evidence = []
@@ -150,6 +226,121 @@ def ask(request: AskRequest):
     }
 
 
+@app.post("/api/v1/ask/stream")
+def ask_stream(request: AskRequest):
+    question = request.question.strip()
+    if not question:
+        raise HTTPException(status_code=422, detail="Question cannot be blank.")
+
+    def event_stream():
+        try:
+            for event in stream_workspace_answer(
+                question,
+                tenant_id=LOCAL_TENANT_ID,
+                selected_document_hashes=request.selected_document_hashes,
+                mode=request.mode,
+                history=request.history,
+                top_k=request.top_k,
+            ):
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+        except Exception as error:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(error)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+@app.post("/api/v1/study-atlas")
+def create_study_atlas(request: StudyAtlasRequest):
+    topic = request.topic.strip()
+    if not topic:
+        raise HTTPException(status_code=422, detail="Topic cannot be blank.")
+
+    atlas, hits = build_study_atlas(
+        topic,
+        tenant_id=LOCAL_TENANT_ID,
+        selected_document_hashes=request.selected_document_hashes,
+    )
+    evidence = []
+    for hit in hits:
+        metadata = hit["metadata"]
+        evidence.append(
+            {
+                "id": hit["id"],
+                "text": hit["text"],
+                "distance": hit["distance"],
+                "accepted": hit["accepted"],
+                "source": metadata.get("source"),
+                "section": metadata.get("section"),
+                "page": metadata.get("page_number"),
+                "slide": metadata.get("slide_number"),
+            }
+        )
+
+    return {"topic": topic, "atlas": atlas, "evidence": evidence}
+
+
+@app.post("/api/v1/study-tools/generate")
+def generate_study_tool(request: StudyToolRequest):
+    topic = request.topic.strip()
+    if not topic:
+        raise HTTPException(status_code=422, detail="Topic cannot be blank.")
+
+    generated, hits = build_study_tool(
+        topic,
+        tool=request.tool,
+        count=request.count,
+        quiz_format=request.quiz_format,
+        difficulty=request.difficulty,
+        tenant_id=LOCAL_TENANT_ID,
+        selected_document_hashes=request.selected_document_hashes,
+    )
+    evidence = []
+    for hit in hits:
+        metadata = hit["metadata"]
+        evidence.append({
+            "id": hit["id"],
+            "text": hit["text"],
+            "distance": hit["distance"],
+            "accepted": hit["accepted"],
+            "source": metadata.get("source"),
+            "section": metadata.get("section"),
+            "page": metadata.get("page_number"),
+            "slide": metadata.get("slide_number"),
+        })
+    return {"topic": topic, "study_tool": generated, "evidence": evidence}
+
+
+@app.post("/api/v1/study-guide/generate")
+def generate_study_guide_endpoint(request: StudyGuideRequest):
+    topic = request.topic.strip()
+    if not topic:
+        raise HTTPException(status_code=422, detail="Topic cannot be blank.")
+
+    guide, hits = build_study_guide(
+        topic,
+        tenant_id=LOCAL_TENANT_ID,
+        selected_document_hashes=request.selected_document_hashes,
+    )
+    evidence = []
+    for hit in hits:
+        metadata = hit["metadata"]
+        evidence.append({
+            "id": hit["id"],
+            "text": hit["text"],
+            "distance": hit["distance"],
+            "accepted": hit["accepted"],
+            "source": metadata.get("source"),
+            "section": metadata.get("section"),
+            "page": metadata.get("page_number"),
+            "slide": metadata.get("slide_number"),
+        })
+    return {"topic": topic, "study_guide": guide, "evidence": evidence}
+
+
 @app.delete("/api/v1/documents/{document_hash}")
 def remove_document(document_hash: str):
     documents = list_documents(tenant_id=LOCAL_TENANT_ID)
@@ -163,3 +354,10 @@ def remove_document(document_hash: str):
 
     delete_document(document_hash, tenant_id=LOCAL_TENANT_ID)
     return {"deleted": True, "document_hash": document_hash}
+
+
+# In production, serve the built React app and API from one origin. During local
+# development the Vite dev server runs separately, so this mount is optional.
+FRONTEND_DIST = Path(__file__).resolve().parent / "frontend" / "dist"
+if FRONTEND_DIST.is_dir():
+    app.mount("/", StaticFiles(directory=FRONTEND_DIST, html=True), name="frontend")
