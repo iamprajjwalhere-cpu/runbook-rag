@@ -155,15 +155,18 @@
   padding: 22px 0 0;
 }
 
+/* Failsafe: the animation always ends fully visible, with or without JavaScript. */
 .reveal {
-  opacity: 0;
-  transform: translateY(18px);
-  transition: opacity var(--motion-slow) cubic-bezier(0.2, 0.7, 0.2, 1), transform var(--motion-slow) cubic-bezier(0.2, 0.7, 0.2, 1);
+  animation: reveal-in var(--motion-slow) cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
-.reveal.is-visible {
-  opacity: 1;
-  transform: translateY(0);
+@keyframes reveal-in {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal { animation: none; }
 }
 
 .hero-section {
