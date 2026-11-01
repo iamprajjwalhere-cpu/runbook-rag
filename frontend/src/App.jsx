@@ -368,6 +368,7 @@ function App() {
   }
 
   useEffect(() => {
+    if (!authenticated) return undefined;
     const sections = NAV_ITEMS
       .map(({ id }) => document.getElementById(id))
       .filter(Boolean);
@@ -411,7 +412,7 @@ function App() {
       window.removeEventListener("scroll", updateProgress);
       window.removeEventListener("resize", updateProgress);
     };
-  }, []);
+  }, [authenticated]);
 
   async function refreshWorkspace() {
     const summary = await apiRequest("/api/v1/documents");
@@ -430,8 +431,7 @@ function App() {
   }
 
   useEffect(() => {
-  if (!authenticated) return undefined;
-  const sections = NAV_ITEMS
+    if (!authenticated) return undefined;
     async function loadWorkspace() {
       try {
         const [summary, samples] = await Promise.all([
