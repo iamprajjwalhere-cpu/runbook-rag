@@ -430,7 +430,8 @@ function App() {
   }
 
   useEffect(() => {
-    if (!authenticated) return undefined;
+  if (!authenticated) return undefined;
+  const sections = NAV_ITEMS
     async function loadWorkspace() {
       try {
         const [summary, samples] = await Promise.all([
