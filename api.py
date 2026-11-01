@@ -1,11 +1,16 @@
 from pathlib import Path
+import hmac
 import json
+import os
+import secrets
 from typing import Literal
 
-from fastapi import FastAPI, File, HTTPException, UploadFile
+from dotenv import load_dotenv
+from fastapi import FastAPI, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel, Field
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.sessions import SessionMiddleware
 
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -26,6 +31,12 @@ from workspace_rag import (
 )
 
 STUDY_SAMPLES_DIR = Path(__file__).resolve().parent / "data" / "study_samples"
+load_dotenv(Path(__file__).resolve().parent / ".env")
+
+OWNER_PASSWORD = os.getenv("STUDYSPACE_OWNER_PASSWORD", "")
+SESSION_SECRET = os.getenv("STUDYSPACE_SESSION_SECRET") or secrets.token_urlsafe(48)
+AUTH_CONFIGURED = len(OWNER_PASSWORD) >= 20 and len(os.getenv("STUDYSPACE_SESSION_SECRET", "")) >= 32
+IS_RENDER = os.getenv("RENDER", "").lower() == "true"
 
 # Local prototype scope. The API owns this value; callers do not supply it.
 LOCAL_TENANT_ID = "local_demo_workspace"
@@ -34,6 +45,9 @@ app = FastAPI(
     title="Studyspace API",
     description="Course material ingestion and source-grounded study assistance.",
     version="0.1.0",
+    docs_url=None,
+    redoc_url=None,
+    openapi_url=None,
 )
 
 app.add_middleware(
@@ -42,9 +56,55 @@ app.add_middleware(
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     ],
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Content-Type"],
+)
+
+
+@app.middleware("http")
+async def require_owner_session(request: Request, call_next):
+    """Fail closed for every API endpoint except health and login bootstrap."""
+    path = request.url.path
+    open_api_paths = {
+        "/api/v1/auth/status",
+        "/api/v1/auth/login",
+        "/api/v1/auth/logout",
+    }
+    if (path == "/api/v1" or path.startswith("/api/v1/")) and path not in open_api_paths and request.method != "OPTIONS":
+        if not AUTH_CONFIGURED:
+            return JSONResponse(
+                status_code=503,
+                content={"detail": "Owner access is not configured. Set the Studyspace password and session secret."},
+            )
+        if not request.session.get("owner_authenticated"):
+            return JSONResponse(status_code=401, content={"detail": "Sign in to access this private notebook."})
+
+        # SameSite cookies block normal cross-site POSTs; this Origin check adds
+        # an explicit browser-side CSRF barrier for state-changing requests.
+        if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+            origin = request.headers.get("origin")
+            if origin:
+                allowed_origins = {
+                    "http://localhost:5173",
+                    "http://127.0.0.1:5173",
+                    os.getenv("RENDER_EXTERNAL_URL", "").rstrip("/"),
+                }
+                request_origin = f"{request.url.scheme}://{request.headers.get('host', '')}".rstrip("/")
+                if origin.rstrip("/") not in allowed_origins and origin.rstrip("/") != request_origin:
+                    return JSONResponse(status_code=403, content={"detail": "Request origin is not allowed."})
+    return await call_next(request)
+
+
+# Session middleware wraps the API guard so the guard can validate the signed,
+# HttpOnly cookie before any protected endpoint runs.
+app.add_middleware(
+    SessionMiddleware,
+    secret_key=SESSION_SECRET,
+    session_cookie="studyspace_session",
+    max_age=60 * 60 * 24 * 7,
+    same_site="lax",
+    https_only=IS_RENDER,
 )
 
 
@@ -54,6 +114,10 @@ class AskRequest(BaseModel):
     selected_document_hashes: list[str] | None = Field(default=None, max_length=50)
     mode: Literal["simple", "exam", "deep", "steps"] = "exam"
     history: list[dict[str, str]] = Field(default_factory=list, max_length=8)
+
+
+class OwnerLoginRequest(BaseModel):
+    password: str = Field(min_length=1, max_length=256)
 
 
 class StudyAtlasRequest(BaseModel):
@@ -83,6 +147,31 @@ class SearchRequest(BaseModel):
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/api/v1/auth/status")
+def auth_status(request: Request):
+    return {"authenticated": bool(request.session.get("owner_authenticated")), "configured": AUTH_CONFIGURED}
+
+
+@app.post("/api/v1/auth/login")
+def owner_login(request: Request, payload: OwnerLoginRequest):
+    if not AUTH_CONFIGURED:
+        raise HTTPException(
+            status_code=503,
+            detail="Owner access is not configured. Add STUDYSPACE_OWNER_PASSWORD (20+ characters) and STUDYSPACE_SESSION_SECRET (32+ characters) in the service environment.",
+        )
+    if not hmac.compare_digest(payload.password, OWNER_PASSWORD):
+        raise HTTPException(status_code=401, detail="That password did not match.")
+    request.session.clear()
+    request.session["owner_authenticated"] = True
+    return {"authenticated": True}
+
+
+@app.post("/api/v1/auth/logout")
+def owner_logout(request: Request):
+    request.session.clear()
+    return {"authenticated": False}
 
 
 @app.get("/api/v1/documents")

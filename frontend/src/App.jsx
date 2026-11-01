@@ -115,7 +115,7 @@ const ACTIVITY_LABELS = {
 };
 
 async function apiRequest(path, options = {}) {
-  const response = await fetch(`${API}${path}`, options);
+  const response = await fetch(`${API}${path}`, { credentials: "include", ...options });
   const data = await response.json().catch(() => ({}));
 
   if (!response.ok) {
@@ -132,6 +132,7 @@ function uploadFileWithProgress(file, onProgress, onProcessing) {
   return new Promise((resolve, reject) => {
     const request = new XMLHttpRequest();
     request.open("POST", `${API}/api/v1/documents/upload`);
+    request.withCredentials = true;
     request.upload.onprogress = (event) => {
       if (!event.lengthComputable) return;
       const progress = Math.round((event.loaded / event.total) * 100);
@@ -166,6 +167,12 @@ function citationParts(answer, evidence, onSelect) {
 }
 
 function App() {
+  const [authChecked, setAuthChecked] = useState(false);
+  const [authenticated, setAuthenticated] = useState(false);
+  const [authConfigured, setAuthConfigured] = useState(true);
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loginBusy, setLoginBusy] = useState(false);
+  const [loginError, setLoginError] = useState("");
   const [activeSection, setActiveSection] = useState("hero");
   const [scrollProgress, setScrollProgress] = useState(0);
   const [documents, setDocuments] = useState([]);
@@ -217,6 +224,24 @@ function App() {
   const fileInput = useRef(null);
   const streamController = useRef(null);
   const commandInput = useRef(null);
+
+  useEffect(() => {
+    let active = true;
+    apiRequest("/api/v1/auth/status")
+      .then((status) => {
+        if (!active) return;
+        setAuthConfigured(status.configured);
+        setAuthenticated(status.authenticated);
+        if (!status.configured) {
+          setLoginError("Owner access is not configured yet. Add the two Studyspace access values in Render’s Environment settings.");
+        }
+      })
+      .catch(() => {
+        if (active) setLoginError("Could not connect to Studyspace. Refresh the page and try again.");
+      })
+      .finally(() => { if (active) setAuthChecked(true); });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     try {
@@ -287,6 +312,7 @@ function App() {
       setSearchError("");
       try {
         const response = await fetch(`${API}/api/v1/search`, {
+          credentials: "include",
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ query }),
@@ -404,6 +430,7 @@ function App() {
   }
 
   useEffect(() => {
+    if (!authenticated) return undefined;
     async function loadWorkspace() {
       try {
         const [summary, samples] = await Promise.all([
@@ -421,7 +448,45 @@ function App() {
     }
 
     loadWorkspace();
-  }, []);
+    return undefined;
+  }, [authenticated]);
+
+  async function signIn(event) {
+    event.preventDefault();
+    setLoginBusy(true);
+    setLoginError("");
+    try {
+      await apiRequest("/api/v1/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: loginPassword }),
+      });
+      setLoginPassword("");
+      setAuthenticated(true);
+    } catch (requestError) {
+      setLoginError(requestError.message);
+    } finally {
+      setLoginBusy(false);
+    }
+  }
+
+  async function signOut() {
+    try {
+      await apiRequest("/api/v1/auth/logout", { method: "POST" });
+    } finally {
+      setAuthenticated(false);
+      setDocuments([]);
+      setPassageCount(0);
+      setSelectedDocumentHashes([]);
+      setPreviewDocument(null);
+      setConversation([]);
+      setAnswerResult(null);
+      setStudyAtlas(null);
+      setStudyToolResult(null);
+      setStudyGuideResult(null);
+      setCommandOpen(false);
+    }
+  }
 
   async function askQuestion(text, { replaceMessageId = null } = {}) {
     const normalizedQuestion = text.trim();
@@ -461,6 +526,7 @@ function App() {
     try {
       const response = await fetch(`${API}/api/v1/ask/stream`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           question: normalizedQuestion,
@@ -871,6 +937,39 @@ function App() {
     downloadTextFile(`\uFEFF${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}`, "studyspace-flashcards-anki.csv", "text/csv;charset=utf-8");
   }
 
+  if (!authChecked) {
+    return <main className="auth-screen"><div className="auth-card"><span className="brand-mark">S</span><p className="eyebrow">STUDENT NOTEBOOK</p><h1>Opening your private notebook…</h1></div></main>;
+  }
+
+  if (!authenticated) {
+    return (
+      <main className="auth-screen">
+        <form className="auth-card" onSubmit={signIn}>
+          <span className="brand-mark">S</span>
+          <p className="eyebrow"><span className="eyebrow-dot" /> PRIVATE STUDYSPACE</p>
+          <h1>Welcome back.</h1>
+          <p className="auth-description">This notebook is private. Enter your owner password to open your study materials.</p>
+          <label htmlFor="owner-password">Owner password</label>
+          <input
+            autoComplete="current-password"
+            id="owner-password"
+            type="password"
+            value={loginPassword}
+            onChange={(event) => setLoginPassword(event.target.value)}
+            placeholder="Enter your private password"
+            required
+            disabled={!authConfigured || loginBusy}
+          />
+          {loginError && <p className="auth-error" role="alert">{loginError}</p>}
+          <button className="primary-button" type="submit" disabled={!authConfigured || loginBusy || !loginPassword}>
+            {loginBusy ? "Unlocking…" : "Open my notebook"}
+          </button>
+          <small>Only you should know this password. Do not share it.</small>
+        </form>
+      </main>
+    );
+  }
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -897,12 +996,13 @@ function App() {
 
         <div className="connection-status">
           <span className="status-dot" />
-          LOCAL WORKSPACE
+          PRIVATE SESSION
         </div>
         <div className="topbar-actions">
           <button className="topbar-tool-button command-trigger" type="button" onClick={() => { setCommandOpen(true); setCommandQuery(""); }} aria-label="Search Studyspace and commands" aria-keyshortcuts="Control+K Meta+K"><span aria-hidden="true">⌕</span><span>Search</span><kbd>⌘K</kbd></button>
           <button className="topbar-tool-button theme-trigger" type="button" onClick={() => setDarkTheme((current) => !current)} aria-label={darkTheme ? "Switch to light mode" : "Switch to dark mode"} title={darkTheme ? "Switch to light mode" : "Switch to dark mode"}><span aria-hidden="true">{darkTheme ? "☼" : "◐"}</span></button>
           <button className="topbar-tool-button notes-trigger" type="button" onClick={() => setNotesOpen(true)} aria-label={`Open ${savedNotes.length} saved notes`} title="Saved notes"><span aria-hidden="true">▤</span><span>Notes</span></button>
+          <button className="topbar-tool-button logout-trigger" type="button" onClick={signOut} aria-label="Lock this notebook" title="Lock this notebook"><span aria-hidden="true">↪</span><span>Lock</span></button>
         </div>
         <div className="scroll-progress-track" aria-hidden="true">
           <span className="scroll-progress-value" style={{ width: `${scrollProgress}%` }} />

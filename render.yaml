@@ -7,5 +7,9 @@ services:
     envVars:
       - key: GEMINI_API_KEY
         sync: false
+      - key: STUDYSPACE_OWNER_PASSWORD
+        sync: false
+      - key: STUDYSPACE_SESSION_SECRET
+        sync: false
       - key: CHROMA_DB_PATH
         value: /tmp/studyspace/chroma_db

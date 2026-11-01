@@ -19,9 +19,15 @@ py -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-### 2. Add your Gemini API key
+### 2. Configure private access and Gemini
 
-Copy `.env.example` to `.env`, open `.env`, and add your Gemini API key. Keep `.env` private; it is excluded from Git.
+Copy `.env.example` to `.env`. Add your Gemini API key, then generate a strong owner password and session secret locally:
+
+```powershell
+.\.venv\Scripts\python.exe -c "import secrets; print('OWNER PASSWORD:', secrets.token_urlsafe(32)); print('SESSION SECRET:', secrets.token_urlsafe(48))"
+```
+
+Keep `.env` private; it is excluded from Git. The deployed demo uses one owner password for the whole notebook; it does not have student sign-up or separate accounts yet.
 
 ### 3. Start the API
 

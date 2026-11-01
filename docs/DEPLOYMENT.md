@@ -15,7 +15,9 @@ The repository includes a Render Blueprint and Dockerfile. One Render web servic
 
 Render free web services sleep after 15 minutes without traffic. They take about a minute to wake, and local files are erased when the service sleeps, restarts, or redeploys. This includes uploaded documents and the Chroma index. After a wake or deploy, add the bundled sample or upload demo material again. Free services cannot use persistent disks. For longer-lived data, use a paid service with a disk mounted at `/var/data` and set `CHROMA_DB_PATH=/var/data/chroma_db`.
 
-This is a public, single-workspace demo without login or user isolation. Anyone who finds the URL can submit questions and uploads that consume the Gemini API quota. Use non-sensitive study material and review the Gemini project's usage limits before sharing the link widely.
+The app has an owner-only password gate. Generate both values locally with `.\.venv\Scripts\python.exe -c "import secrets; print('OWNER PASSWORD:', secrets.token_urlsafe(32)); print('SESSION SECRET:', secrets.token_urlsafe(48))"`. Put the matching values into the Render Environment settings for `STUDYSPACE_OWNER_PASSWORD` and `STUDYSPACE_SESSION_SECRET`; do not commit them or send them in chat. The server sets a signed, HttpOnly, Secure (on Render), SameSite=Lax cookie and requires it for all `/api/v1` data routes. Change the password and rotate the session secret in Render if you think either has been exposed.
+
+This remains a single-owner, single-workspace prototype, not a multi-user service: anyone who knows the owner password can access the same notebook. Keep the URL and password private, use non-sensitive study material, and review Gemini usage limits. The demo does not yet include individual accounts, account recovery, or separate notebooks.
 
 ## Local behavior
 

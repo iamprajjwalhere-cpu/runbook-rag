@@ -2064,6 +2064,42 @@ html[data-theme="dark"] .guide-glossary p,
 html[data-theme="dark"] .quiz-explanation p,
 html[data-theme="dark"] .saved-note-card p { color: #b0beb2; }
 
+.auth-screen {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  padding: 24px;
+}
+
+.auth-card {
+  display: grid;
+  width: min(100%, 440px);
+  gap: 16px;
+  padding: clamp(26px, 6vw, 42px);
+  border: 1px solid var(--color-line);
+  border-radius: 24px;
+  background: color-mix(in srgb, var(--color-paper) 94%, transparent);
+  box-shadow: 0 24px 80px rgba(35, 61, 49, 0.1);
+}
+
+.auth-card .brand-mark { margin-bottom: 3px; }
+.auth-card .eyebrow { margin: 0; }
+.auth-card h1 { margin: 0; color: var(--color-ink-strong); font-family: var(--font-display); font-size: clamp(34px, 7vw, 48px); letter-spacing: -0.055em; }
+.auth-description { margin: 0 0 5px; color: var(--color-muted); font-size: 15px; line-height: 1.7; }
+.auth-card label { color: var(--color-ink); font-size: 13px; font-weight: 700; }
+.auth-card input { width: 100%; min-height: 50px; padding: 12px 14px; border: 1px solid var(--color-line); border-radius: 12px; color: var(--color-ink); background: var(--color-paper); font-size: 16px; }
+.auth-card input:focus-visible { outline: 3px solid rgba(65, 130, 96, 0.28); outline-offset: 2px; }
+.auth-card .primary-button { min-height: 48px; justify-content: center; margin-top: 4px; }
+.auth-card .primary-button:disabled { cursor: not-allowed; opacity: 0.55; }
+.auth-card > small { color: var(--color-muted); font-size: 12px; text-align: center; }
+.auth-error { margin: 0; padding: 11px 13px; border: 1px solid rgba(190, 92, 65, 0.28); border-radius: 10px; color: #9d4d37; background: rgba(255, 237, 229, 0.7); font-size: 13px; line-height: 1.5; }
+.logout-trigger { border-color: var(--color-line); }
+
+@media (max-width: 520px) {
+  .auth-screen { padding: 16px; }
+  .auth-card { gap: 14px; border-radius: 19px; }
+}
+
 @media (max-width: 900px) {
   .topbar { gap: 10px; padding-right: 20px; padding-left: 20px; }
   .topbar-actions { gap: 2px; }
