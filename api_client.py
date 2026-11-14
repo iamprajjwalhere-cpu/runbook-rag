@@ -5,7 +5,7 @@ API_BASE_URL = "http://127.0.0.1:8000"
 REQUEST_TIMEOUT = 180
 
 # UI display and upload rules. The API remains responsible for enforcing these.
-MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 MAX_DISTANCE = 0.35
 SUPPORTED_EXTENSIONS = {".md", ".txt", ".pdf", ".pptx"}
 

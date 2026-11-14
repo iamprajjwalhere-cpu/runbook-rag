@@ -623,8 +623,8 @@ function App() {
         updateUpload(id, { status: "failed", message: "Use a Markdown, TXT, PDF, or PPTX file." });
         continue;
       }
-      if (file.size > 5 * 1024 * 1024) {
-        updateUpload(id, { status: "failed", message: "This file is larger than the 5 MB limit." });
+      if (file.size > 50 * 1024 * 1024) {
+        updateUpload(id, { status: "failed", message: "This file is larger than the 50 MB limit." });
         continue;
       }
 
@@ -1061,7 +1061,7 @@ function App() {
           >
             <input id="source-file-input" ref={fileInput} className="hidden-input" type="file" accept=".md,.txt,.pdf,.pptx" multiple disabled={busy} onChange={(event) => uploadFiles(event.target.files)} />
             <span className="drop-icon" aria-hidden="true">＋</span>
-            <span className="drop-copy"><strong>Drop your course materials here</strong><small>or choose files · MD, TXT, PDF, PPTX · up to 5 MB each</small></span>
+            <span className="drop-copy"><strong>Drop your course materials here</strong><small>or choose files · MD, TXT, PDF, PPTX · up to 50 MB each</small></span>
             <span className="drop-browse">Browse files</span>
           </label>
           {uploadQueue.length > 0 && <div className="upload-queue" aria-live="polite">

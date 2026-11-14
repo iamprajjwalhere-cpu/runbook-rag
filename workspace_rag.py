@@ -18,7 +18,7 @@ from chromadb import Collection
 from ingest import split_into_chunks, split_into_sections
 
 
-MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 SUPPORTED_EXTENSIONS = {".md", ".txt", ".pdf", ".pptx"}
 logger = logging.getLogger(__name__)
 MAX_DISTANCE = 0.35
@@ -85,7 +85,7 @@ def _extract_sections(filename: str, raw_bytes: bytes) -> tuple[list[dict], list
     """Extract section text and locations from the document's native structure."""
     suffix = Path(filename).suffix.lower()
     if len(raw_bytes) > MAX_UPLOAD_BYTES:
-        raise ValueError("The file is larger than the 5 MB upload limit.")
+        raise ValueError(f"The file is larger than the {MAX_UPLOAD_BYTES // (1024 * 1024)} MB upload limit.")
 
     if suffix not in SUPPORTED_EXTENSIONS:
         supported = ", ".join(sorted(SUPPORTED_EXTENSIONS))
